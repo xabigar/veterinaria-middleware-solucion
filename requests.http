@@ -1,0 +1,170 @@
+# API de veterinaria · pruebas (las del ejercicio anterior + middlewares, al final)
+# VS Code + extensión "REST Client": pulsa "Send Request" sobre cada petición.
+# Thunder Client / Postman: copia el método, la URL y el cuerpo.
+# Para devolver los datos al estado inicial: reinicia el servidor
+
+@base = http://localhost:3000
+
+############################ DUEÑOS
+
+### Todos los dueños (ya hecho)
+GET {{base}}/owners
+
+### 1. Crear un dueño → 201
+# @name newOwner
+POST {{base}}/owners
+Content-Type: application/json
+
+{ "name": "Carmen", "email": "carmen@mail.com" }
+
+### 1b. Email duplicado → 409
+POST {{base}}/owners
+Content-Type: application/json
+
+{ "name": "Carmen bis", "email": "carmen@mail.com" }
+
+### 1c. Email inválido → 400
+POST {{base}}/owners
+Content-Type: application/json
+
+{ "name": "Desconocida", "email": "no-es-un-email" }
+
+############################ MASCOTAS (ya hecho)
+
+### Crear una mascota → 201
+# @name newPet
+POST {{base}}/pets
+Content-Type: application/json
+
+{ "name": "Kira", "species": "dog", "owner": "{{newOwner.response.body.$._id}}" }
+
+### species inválida → 400
+POST {{base}}/pets
+Content-Type: application/json
+
+{ "name": "Nemo", "species": "fish", "owner": "{{newOwner.response.body.$._id}}" }
+
+### Perros
+GET {{base}}/pets?species=dog
+
+############################ VETERINARIOS
+
+### Crear un veterinario (ya hecho)
+# @name newVet
+POST {{base}}/vets
+Content-Type: application/json
+
+{ "name": "Jon Arrieta", "speciality": "gatos", "availableDays": ["martes"] }
+
+### 2. Disponibles el lunes O especializados en aves
+GET {{base}}/vets?day=lunes&speciality=aves
+
+### 3. Actualizar el email del veterinario → 200
+PATCH {{base}}/vets/{{newVet.response.body.$._id}}
+Content-Type: application/json
+
+{ "email": "jon@clinica.eus" }
+
+### 3b. Email inválido → 400 (runValidators)
+PATCH {{base}}/vets/{{newVet.response.body.$._id}}
+Content-Type: application/json
+
+{ "email": "jon" }
+
+### 3c. No existe → 404
+PATCH {{base}}/vets/000000000000000000000000
+Content-Type: application/json
+
+{ "email": "jon@clinica.eus" }
+
+### 3d. ID inválido → 400 (CastError)
+PATCH {{base}}/vets/abc
+Content-Type: application/json
+
+{ "email": "jon@clinica.eus" }
+
+############################ CITAS
+
+### 4. Crear una cita → 201
+POST {{base}}/appointments
+Content-Type: application/json
+
+{
+  "date": "2030-12-15T10:00:00Z",
+  "reason": "Revisión anual",
+  "pet": "{{newPet.response.body.$._id}}",
+  "vet": "{{newVet.response.body.$._id}}"
+}
+
+### 4b. La mascota no existe → 400
+POST {{base}}/appointments
+Content-Type: application/json
+
+{
+  "date": "2030-12-15T10:00:00Z",
+  "reason": "Revisión anual",
+  "pet": "000000000000000000000000",
+  "vet": "{{newVet.response.body.$._id}}"
+}
+
+### 5. Próximas citas (populate: pet → owner, vet)
+GET {{base}}/appointments/upcoming
+
+### 6. Borrar las citas pasadas → { "deleted": N }
+DELETE {{base}}/appointments/past
+
+### Todas las citas (ya hecho)
+GET {{base}}/appointments
+
+############################ MIDDLEWARES (ejercicio nuevo)
+# Parte 1 · Logger: ejecuta cualquier petición y mira la consola:
+#   GET /vets?day=Lunes 200 12 ms
+
+### Parte 3a · Día correcto, también con mayúsculas → 200
+GET {{base}}/vets?day=Lunes
+
+### Parte 3a · Día incorrecto → 400 { "errors": { "day": … } }
+GET {{base}}/vets?day=monday
+
+### Parte 3a · Especialidad vacía → 400
+GET {{base}}/vets?speciality=
+
+### Parte 3b · Todo mal → 400, un mensaje por campo
+POST {{base}}/appointments
+Content-Type: application/json
+
+{ "date": "mañana", "pet": "abc" }
+
+### Parte 3b · Fecha pasada → 400
+POST {{base}}/appointments
+Content-Type: application/json
+
+{
+  "date": "2020-01-01T10:00",
+  "reason": "Control",
+  "pet": "{{newPet.response.body.$._id}}",
+  "vet": "{{newVet.response.body.$._id}}"
+}
+
+### Parte 2 · Antispam: ejecútala DOS VECES en menos de 10 segundos → 201, luego 429
+POST {{base}}/appointments
+Content-Type: application/json
+
+{
+  "date": "2030-06-15T10:00",
+  "reason": "Vacuna",
+  "pet": "{{newPet.response.body.$._id}}",
+  "vet": "{{newVet.response.body.$._id}}"
+}
+
+### Parte 3c · ID inválido → 400 (express-validator lo para, no llega al CastError)
+PATCH {{base}}/vets/abc
+Content-Type: application/json
+
+{ "email": "jon@clinica.eus" }
+
+### Parte 3c · Sin email → 400
+PATCH {{base}}/vets/{{newVet.response.body.$._id}}
+Content-Type: application/json
+
+{}
